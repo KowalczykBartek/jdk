@@ -1043,6 +1043,7 @@ Node* MemNode::can_see_stored_value(Node* st, PhaseTransform* phase) const {
                      opc == Op_LoadFence)) ||
           opc == Op_MemBarRelease ||
           opc == Op_StoreFence ||
+          opc == Op_StoreStoreFence ||
           opc == Op_MemBarReleaseLock ||
           opc == Op_MemBarStoreStore ||
           opc == Op_MemBarCPUOrder) {
@@ -3137,6 +3138,7 @@ MemBarNode* MemBarNode::make(Compile* C, int opcode, int atp, Node* pn) {
   case Op_LoadFence:         return new LoadFenceNode(C, atp, pn);
   case Op_MemBarRelease:     return new MemBarReleaseNode(C, atp, pn);
   case Op_StoreFence:        return new StoreFenceNode(C, atp, pn);
+  case Op_StoreStoreFence:   return new StoreStoreFenceNode(C, atp, pn);
   case Op_MemBarAcquireLock: return new MemBarAcquireLockNode(C, atp, pn);
   case Op_MemBarReleaseLock: return new MemBarReleaseLockNode(C, atp, pn);
   case Op_MemBarVolatile:    return new MemBarVolatileNode(C, atp, pn);
