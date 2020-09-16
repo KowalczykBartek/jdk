@@ -3467,6 +3467,8 @@ public final class Unsafe {
      */
     @HotSpotIntrinsicCandidate
     public final void storeStoreFence() {
+        // Without the special intrinsic, default to a stronger storeFence,
+        // which is already intrinsified.
         storeFence();
     }
 
