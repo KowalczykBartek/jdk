@@ -535,8 +535,12 @@ void ShenandoahHeap::reset_mark_bitmap() {
   assert_gc_workers(_workers->active_workers());
   mark_incomplete_marking_context();
 
-  ShenandoahResetBitmapTask task;
-  _workers->run_task(&task);
+  if (UseNewCode) {
+
+  } else {
+    ShenandoahResetBitmapTask task;
+    _workers->run_task(&task);
+  }
 }
 
 void ShenandoahHeap::print_on(outputStream* st) const {
@@ -1846,6 +1850,10 @@ void ShenandoahHeap::op_cleanup_early() {
 
 void ShenandoahHeap::op_cleanup_complete() {
   free_set()->recycle_trash();
+
+  if (UseNewCode) {
+    os::unload_memory((char*)_bitmap_region.start(), _bitmap_region.byte_size());
+  }
 }
 
 class ShenandoahConcurrentRootsEvacUpdateTask : public AbstractGangTask {

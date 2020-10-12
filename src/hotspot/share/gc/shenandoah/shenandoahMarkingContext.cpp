@@ -63,7 +63,11 @@ void ShenandoahMarkingContext::clear_bitmap(ShenandoahHeapRegion* r) {
   HeapWord* bottom = r->bottom();
   HeapWord* top_bitmap = _top_bitmaps[r->index()];
   if (top_bitmap > bottom) {
-    _mark_bit_map.clear_range_large(MemRegion(bottom, top_bitmap));
+    if (UseNewCode) {
+      os::load_memory((char *) bottom, ShenandoahHeapRegion::region_size_bytes());
+    } else {
+      _mark_bit_map.clear_range_large(MemRegion(bottom, top_bitmap));
+    }
     _top_bitmaps[r->index()] = bottom;
   }
   assert(is_bitmap_clear_range(bottom, r->end()),

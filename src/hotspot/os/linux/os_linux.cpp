@@ -3491,6 +3491,16 @@ bool os::pd_release_memory(char* addr, size_t size) {
   return anon_munmap(addr, size);
 }
 
+bool os::pd_load_memory(char* addr, size_t size) {
+  int result = madvise(addr, size, MADV_WILLNEED);
+  return (result != -1);
+}
+
+bool os::pd_unload_memory(char* addr, size_t size) {
+  int result = madvise(addr, size, MADV_DONTNEED);
+  return (result != -1);
+}
+
 #ifdef CAN_SHOW_REGISTERS_ON_ASSERT
 extern char* g_assert_poison; // assertion poison page address
 #endif

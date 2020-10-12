@@ -131,6 +131,9 @@ class os: AllStatic {
   static bool   pd_uncommit_memory(char* addr, size_t bytes);
   static bool   pd_release_memory(char* addr, size_t bytes);
 
+  static bool   pd_load_memory(char* addr, size_t bytes);
+  static bool   pd_unload_memory(char* addr, size_t bytes);
+
   static char*  pd_map_memory(int fd, const char* file_name, size_t file_offset,
                            char *addr, size_t bytes, bool read_only = false,
                            bool allow_exec = false);
@@ -349,6 +352,9 @@ class os: AllStatic {
                                       bool executable, const char* mesg);
   static bool   uncommit_memory(char* addr, size_t bytes);
   static bool   release_memory(char* addr, size_t bytes);
+
+  static bool   load_memory(char* addr, size_t bytes);
+  static bool   unload_memory(char* addr, size_t bytes);
 
   // Touch memory pages that cover the memory range from start to end (exclusive)
   // to make the OS back the memory range with actual memory.

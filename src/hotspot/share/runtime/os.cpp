@@ -1752,6 +1752,26 @@ bool os::release_memory(char* addr, size_t bytes) {
   return res;
 }
 
+bool os::load_memory(char* addr, size_t bytes) {
+  MemTracker::record_virtual_memory_commit((address)addr, bytes, CALLER_PC);
+  return os::pd_load_memory(addr, bytes);
+}
+
+bool os::unload_memory(char* addr, size_t bytes) {
+  bool res;
+  if (MemTracker::tracking_level() > NMT_minimal) {
+    // Note: Tracker contains a ThreadCritical.
+    Tracker tkr(Tracker::uncommit);
+    res = pd_unload_memory(addr, bytes);
+    if (res) {
+      tkr.record((address)addr, bytes);
+    }
+  } else {
+    res = pd_unload_memory(addr, bytes);
+  }
+  return res;
+}
+
 void os::pretouch_memory(void* start, void* end, size_t page_size) {
   for (volatile char *p = (char*)start; p < (char*)end; p += page_size) {
     *p = 0;
