@@ -49,8 +49,6 @@ void ZeroInterpreterGenerator::generate_all() {
     // all non-native method kinds
     method_entry(zerolocals);
     method_entry(zerolocals_synchronized);
-    method_entry(empty);
-    method_entry(accessor);
     method_entry(abstract);
     method_entry(java_lang_math_sin   );
     method_entry(java_lang_math_cos   );
@@ -89,8 +87,6 @@ address ZeroInterpreterGenerator::generate_method_entry(
   case Interpreter::zerolocals_synchronized:                synchronized = true;      break;
   case Interpreter::native                 : native = true;                           break;
   case Interpreter::native_synchronized    : native = true; synchronized = true;      break;
-  case Interpreter::empty                  :                                          break;
-  case Interpreter::accessor               :                                          break;
   case Interpreter::abstract               : entry_point = generate_abstract_entry(); break;
 
   case Interpreter::java_lang_math_sin     : // fall thru

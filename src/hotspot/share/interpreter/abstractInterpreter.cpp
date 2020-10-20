@@ -157,11 +157,6 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(const methodHan
     return zerolocals;
   }
 
-  // Empty method?
-  if (m->is_empty_method()) {
-    return empty;
-  }
-
   // Special intrinsic method?
   // Note: This test must come _after_ the test for native methods,
   //       otherwise we will run into problems with JDK 1.2, see also
@@ -183,15 +178,6 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(const methodHan
     case vmIntrinsics::_Reference_get
                               : return java_lang_ref_reference_get;
     default                   : break;
-  }
-
-  // Accessor method?
-  if (m->is_getter()) {
-    // TODO: We should have used ::is_accessor above, but fast accessors in Zero expect only getters.
-    // See ZeroInterpreter::accessor_entry in zeroInterpreter_zero.cpp. This should be fixed in Zero,
-    // then the call above updated to ::is_accessor
-    assert(m->size_of_parameters() == 1, "fast code for accessors assumes parameter size = 1");
-    return accessor;
   }
 
   // Note: for now: zero locals for all non-empty methods
@@ -291,8 +277,6 @@ void AbstractInterpreter::print_method_kind(MethodKind kind) {
     case zerolocals_synchronized: tty->print("zerolocals_synchronized"); break;
     case native                 : tty->print("native"                 ); break;
     case native_synchronized    : tty->print("native_synchronized"    ); break;
-    case empty                  : tty->print("empty"                  ); break;
-    case accessor               : tty->print("accessor"               ); break;
     case abstract               : tty->print("abstract"               ); break;
     case java_lang_math_sin     : tty->print("java_lang_math_sin"     ); break;
     case java_lang_math_cos     : tty->print("java_lang_math_cos"     ); break;
