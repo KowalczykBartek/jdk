@@ -78,12 +78,6 @@ define_pd_global(bool, CompactStrings, false);
                    notproduct,                                              \
                    range,                                                   \
                    constraint)                                              \
-                                                                            \
-  product(bool, UseFastEmptyMethods, true,                                  \
-          "Use fast method entry code for empty methods")                   \
-                                                                            \
-  product(bool, UseFastAccessorMethods, true,                               \
-          "Use fast method entry code for accessor methods")
 
 // end of ARCH_FLAGS
 

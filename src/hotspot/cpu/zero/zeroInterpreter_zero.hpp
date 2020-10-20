@@ -34,8 +34,6 @@
   // Method entries
   static int normal_entry(Method* method, intptr_t UNUSED, TRAPS);
   static int native_entry(Method* method, intptr_t UNUSED, TRAPS);
-  static int accessor_entry(Method* method, intptr_t UNUSED, TRAPS);
-  static int empty_entry(Method* method, intptr_t UNUSED, TRAPS);
 
  public:
   // Main loop of normal_entry

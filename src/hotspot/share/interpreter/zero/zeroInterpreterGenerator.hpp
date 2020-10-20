@@ -43,8 +43,6 @@ class ZeroInterpreterGenerator: public AbstractInterpreterGenerator {
   address generate_native_entry(bool synchronized);
   address generate_abstract_entry();
   address generate_math_entry(AbstractInterpreter::MethodKind kind);
-  address generate_empty_entry();
-  address generate_accessor_entry();
   address generate_Reference_get_entry();
 
  public:

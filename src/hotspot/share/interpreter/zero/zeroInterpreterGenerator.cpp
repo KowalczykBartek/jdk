@@ -89,8 +89,8 @@ address ZeroInterpreterGenerator::generate_method_entry(
   case Interpreter::zerolocals_synchronized:                synchronized = true;      break;
   case Interpreter::native                 : native = true;                           break;
   case Interpreter::native_synchronized    : native = true; synchronized = true;      break;
-  case Interpreter::empty                  : entry_point = generate_empty_entry();    break;
-  case Interpreter::accessor               : entry_point = generate_accessor_entry(); break;
+  case Interpreter::empty                  :                                          break;
+  case Interpreter::accessor               :                                          break;
   case Interpreter::abstract               : entry_point = generate_abstract_entry(); break;
 
   case Interpreter::java_lang_math_sin     : // fall thru
@@ -147,20 +147,6 @@ address ZeroInterpreterGenerator::generate_math_entry(
 
 address ZeroInterpreterGenerator::generate_abstract_entry() {
   return generate_entry((address) ShouldNotCallThisEntry());
-}
-
-address ZeroInterpreterGenerator::generate_empty_entry() {
-  if (!UseFastEmptyMethods)
-    return NULL;
-
-  return generate_entry((address) ZeroInterpreter::empty_entry);
-}
-
-address ZeroInterpreterGenerator::generate_accessor_entry() {
-  if (!UseFastAccessorMethods)
-    return NULL;
-
-  return generate_entry((address) ZeroInterpreter::accessor_entry);
 }
 
 address ZeroInterpreterGenerator::generate_Reference_get_entry(void) {

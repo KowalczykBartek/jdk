@@ -310,16 +310,6 @@ void JvmtiManageCapabilities::update() {
     avail.can_generate_frame_pop_events ||
     avail.can_generate_method_entry_events ||
     avail.can_generate_method_exit_events;
-#ifdef ZERO
-  bool enter_all_methods =
-    interp_events ||
-    avail.can_generate_breakpoint_events;
-  if (enter_all_methods) {
-    // Disable these when tracking the bytecodes
-    UseFastEmptyMethods = false;
-    UseFastAccessorMethods = false;
-  }
-#endif // ZERO
 
   if (avail.can_generate_breakpoint_events
        || avail.can_generate_field_access_events
