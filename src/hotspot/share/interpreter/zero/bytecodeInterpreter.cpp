@@ -224,7 +224,6 @@
 #endif
 #endif
 
-
 #define UPDATE_PC(opsize) {pc += opsize; }
 /*
  * UPDATE_PC_AND_TOS - Macro for updating the pc and topOfStack.
@@ -291,6 +290,8 @@
    istate->set_bcp(pc+opsize);        \
    return;
 
+#define REWRITE_AT_PC(val) \
+    *pc = val;
 
 #define METHOD istate->method()
 #define GET_METHOD_COUNTERS(res)
@@ -388,47 +389,42 @@
         }
 
 
-#define MAYBE_POST_FIELD_ACCESS() {                                 \
+#define MAYBE_POST_FIELD_ACCESS(obj) {                              \
   if (JVMTI_ENABLED) {                                              \
-    int *count_addr;                                                \
-    oop obj;                                                        \
+    int* count_addr;                                                \
     /* Check to see if a field modification watch has been set */   \
     /* before we take the time to call into the VM. */              \
-    count_addr = (int *)JvmtiExport::get_field_access_count_addr(); \
-    if ( *count_addr > 0 ) {                                        \
+    count_addr = (int*)JvmtiExport::get_field_access_count_addr();  \
+    if (*count_addr > 0) {                                          \
+      oop target;                                                   \
       if ((Bytecodes::Code)opcode == Bytecodes::_getstatic) {       \
-        obj = (oop)NULL;                                            \
+        target = NULL;                                              \
       } else {                                                      \
-        obj = (oop) STACK_OBJECT(-1);                               \
-        VERIFY_OOP(obj);                                            \
+        target = obj;                                               \
       }                                                             \
-      CALL_VM(InterpreterRuntime::post_field_access(THREAD, obj, cache), handle_exception); \
+      CALL_VM(InterpreterRuntime::post_field_access(THREAD,         \
+                                  target, cache),                   \
+                                  handle_exception);                \
     }                                                               \
   }                                                                 \
 }
-#define MAYBE_POST_FIELD_MODIFICATION() {                           \
+#define MAYBE_POST_FIELD_MODIFICATION(obj) {                        \
   if (JVMTI_ENABLED) {                                              \
-    int *count_addr;                                                \
+    int* count_addr;                                                \
     oop obj;                                                        \
     /* Check to see if a field modification watch has been set */   \
     /* before we take the time to call into the VM.            */   \
-    count_addr = (int *)JvmtiExport::get_field_modification_count_addr(); \
-    if ( *count_addr > 0 ) {                                        \
-      if ((Bytecodes::Code)opcode == Bytecodes::_putstatic) {       \
-        obj = (oop)NULL;                                            \
+    count_addr = (int*)JvmtiExport::get_field_modification_count_addr(); \
+    if (*count_addr > 0) {                                          \
+      oop target;                                                   \
+      if ((Bytecodes::Code)opcode == Bytecodes::_getstatic) {       \
+        target = NULL;                                              \
+      } else {                                                      \
+        target = obj;                                               \
       }                                                             \
-      else {                                                        \
-        if (cache->is_long() || cache->is_double()) {               \
-          obj = (oop) STACK_OBJECT(-3);                             \
-        } else {                                                    \
-          obj = (oop) STACK_OBJECT(-2);                             \
-        }                                                           \
-        VERIFY_OOP(obj);                                            \
-      }                                                             \
-       CALL_VM(InterpreterRuntime::post_field_modification(THREAD,  \
-                                  obj,                              \
-                                  cache,                            \
-                                  (jvalue *)STACK_SLOT(-1)),        \
+      CALL_VM(InterpreterRuntime::post_field_modification(THREAD,   \
+                                  target, cache,                    \
+                                  (jvalue*)STACK_SLOT(-1)),         \
                                   handle_exception);                \
     }                                                               \
   }                                                                 \
@@ -866,38 +862,41 @@ run:
           SET_STACK_OBJECT(LOCALS_OBJECT(pc[1]), 0);
           UPDATE_PC_AND_TOS_AND_CONTINUE(2, 1);
 
-      CASE(_iload): {
+      CASE(_iload):
+      {
         // Attempt to rewrite iload, iload -> fast_iload2
         //                    iload, caload -> fast_icaload
         // Normal iloads will be rewritten to fast_iload to avoid checking again.
-        Bytecodes::Code next = (Bytecodes::Code) *(pc + 2);
+        Bytecodes::Code next = (Bytecodes::Code) * (pc + 2);
         switch (next) {
-        case Bytecodes::_fast_iload:
-          *(pc) = Bytecodes::_fast_iload2;
-          break;
-        case Bytecodes::_caload:
-          *(pc) = Bytecodes::_fast_icaload;
-          break;
-        case Bytecodes::_iload:
-          // Wait until rewritten to _fast_iload.
-          break;
-        default:
-          // Last iload in a (potential) series, don't check again.
-          *(pc) = Bytecodes::_fast_iload;
+          case Bytecodes::_fast_iload:
+            REWRITE_AT_PC(Bytecodes::_fast_iload2);
+            break;
+          case Bytecodes::_caload:
+            REWRITE_AT_PC(Bytecodes::_fast_icaload);
+            break;
+          case Bytecodes::_iload:
+            // Wait until rewritten to _fast_iload.
+            break;
+          default:
+            // Last iload in a (potential) series, don't check again.
+            REWRITE_AT_PC(Bytecodes::_fast_iload);
         }
         // Normal iload handling.
         SET_STACK_SLOT(LOCALS_SLOT(pc[1]), 0);
         UPDATE_PC_AND_TOS_AND_CONTINUE(2, 1);
       }
+
       CASE(_fast_iload):
       CASE(_fload):
           SET_STACK_SLOT(LOCALS_SLOT(pc[1]), 0);
           UPDATE_PC_AND_TOS_AND_CONTINUE(2, 1);
 
       CASE(_fast_iload2):
-        SET_STACK_SLOT(LOCALS_SLOT(pc[1]), 0);
-        SET_STACK_SLOT(LOCALS_SLOT(pc[3]), 1);
-        UPDATE_PC_AND_TOS_AND_CONTINUE(4, 2);
+          SET_STACK_SLOT(LOCALS_SLOT(pc[1]), 0);
+          SET_STACK_SLOT(LOCALS_SLOT(pc[3]), 1);
+          UPDATE_PC_AND_TOS_AND_CONTINUE(4, 2);
+
       CASE(_lload):
           SET_STACK_LONG_FROM_ADDR(LOCALS_LONG_AT(pc[1]), 1);
           UPDATE_PC_AND_TOS_AND_CONTINUE(2, 2);
@@ -925,18 +924,18 @@ run:
           OPC_LOAD_n(2);
           OPC_LOAD_n(3);
 
-      CASE(_aload_0): {
-        {
-          /* Maybe rewrite if following bytecode is one of the supported _fast_Xgetfield bytecodes. */
-          switch (*(pc + 1)) {
+      CASE(_aload_0):
+      {
+        /* Maybe rewrite if following bytecode is one of the supported _fast_Xgetfield bytecodes. */
+        switch (*(pc + 1)) {
           case Bytecodes::_fast_agetfield:
-            *pc = Bytecodes::_fast_aaccess_0;
+            REWRITE_AT_PC(Bytecodes::_fast_aaccess_0);
             break;
           case Bytecodes::_fast_fgetfield:
-            *pc = Bytecodes::_fast_faccess_0;
+            REWRITE_AT_PC(Bytecodes::_fast_faccess_0);
             break;
           case Bytecodes::_fast_igetfield:
-            *pc = Bytecodes::_fast_iaccess_0;
+            REWRITE_AT_PC(Bytecodes::_fast_iaccess_0);
             break;
           case Bytecodes::_getfield: {
             /* Otherwise, do nothing here, wait until it gets rewritten to _fast_Xgetfield.
@@ -945,24 +944,37 @@ run:
             break;
           }
           default:
-            *pc = Bytecodes::_fast_aload_0;
+            REWRITE_AT_PC(Bytecodes::_fast_aload_0);
             break;
-          }
         }
         VERIFY_OOP(LOCALS_OBJECT(0));
         SET_STACK_OBJECT(LOCALS_OBJECT(0), 0);
         UPDATE_PC_AND_TOS_AND_CONTINUE(1, 1);
       }
-#undef  OPC_ALOAD_n
-#define OPC_ALOAD_n(num)                                              \
-    CASE(_aload_##num):                                               \
-        VERIFY_OOP(LOCALS_OBJECT(num));                               \
-        SET_STACK_OBJECT(LOCALS_OBJECT(num), 0);                      \
-        UPDATE_PC_AND_TOS_AND_CONTINUE(1, 1);
 
-          OPC_ALOAD_n(1);
-          OPC_ALOAD_n(2);
-          OPC_ALOAD_n(3);
+      CASE(_aload_1):
+      {
+          oop obj = LOCALS_OBJECT(1);
+          VERIFY_OOP(obj);
+          SET_STACK_OBJECT(obj, 0);
+          UPDATE_PC_AND_TOS_AND_CONTINUE(1, 1);
+      }
+
+      CASE(_aload_2):
+      {
+          oop obj = LOCALS_OBJECT(2);
+          VERIFY_OOP(obj);
+          SET_STACK_OBJECT(obj, 0);
+          UPDATE_PC_AND_TOS_AND_CONTINUE(1, 1);
+      }
+
+      CASE(_aload_3):
+      {
+          oop obj = LOCALS_OBJECT(3);
+          VERIFY_OOP(obj);
+          SET_STACK_OBJECT(obj, 0);
+          UPDATE_PC_AND_TOS_AND_CONTINUE(1, 1);
+      }
 
           /* store to a local variable */
 
@@ -1749,8 +1761,6 @@ run:
             cache = cp->entry_at(index);
           }
 
-          MAYBE_POST_FIELD_ACCESS();
-
           oop obj;
           if ((Bytecodes::Code)opcode == Bytecodes::_getstatic) {
             Klass* k = cache->f1_as_klass();
@@ -1760,12 +1770,13 @@ run:
             obj = (oop) STACK_OBJECT(-1);
             CHECK_NULL(obj);
             // Check if we can rewrite non-volatile _getfield to one of the _fast_Xgetfield.
-            if (! cache->is_volatile()) {
+            if (!cache->is_volatile()) {
               // Rewrite current BC to _fast_Xgetfield.
-              TosState tos_type = cache->flag_state();
-              *pc = fast_get_type(tos_type);
+              REWRITE_AT_PC(fast_get_type(cache->flag_state()));
             }
           }
+
+          MAYBE_POST_FIELD_ACCESS(obj);
 
           //
           // Now store the result on the stack
@@ -1833,8 +1844,6 @@ run:
             cache = cp->entry_at(index);
           }
 
-          MAYBE_POST_FIELD_MODIFICATION();
-
           // QQQ Need to make this as inlined as possible. Probably need to split all the bytecode cases
           // out so c++ compiler has a chance for constant prop to fold everything possible away.
 
@@ -1857,10 +1866,11 @@ run:
             // Check if we can rewrite non-volatile _putfield to one of the _fast_Xputfield.
             if (!cache->is_volatile()) {
               // Rewrite current BC to _fast_Xputfield.
-              TosState tos_type = cache->flag_state();
-              *pc = fast_put_type(tos_type);
+              REWRITE_AT_PC(fast_put_type(cache->flag_state()));
             }
           }
+
+          MAYBE_POST_FIELD_MODIFICATION(obj);
 
           //
           // Now store the result
@@ -2389,7 +2399,7 @@ run:
             if (cache->is_vfinal()) {
               callee = cache->f2_as_vfinal_method();
               // Rewrite to _fast_invokevfinal.
-              *pc = Bytecodes::_fast_invokevfinal;
+              REWRITE_AT_PC(Bytecodes::_fast_invokevfinal);
             } else {
               // get receiver
               int parms = cache->parameter_size();
@@ -2523,320 +2533,330 @@ run:
           opcode = (jubyte)original_bytecode;
           goto opcode_switch;
       }
+
       CASE(_fast_agetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
+
+        MAYBE_POST_FIELD_ACCESS(obj);
 
         VERIFY_OOP(obj->obj_field(field_offset));
         SET_STACK_OBJECT(obj->obj_field(field_offset), -1);
-
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_bgetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
 
-        SET_STACK_INT(obj->byte_field(field_offset), -1);
+        MAYBE_POST_FIELD_ACCESS(obj);
 
+        SET_STACK_INT(obj->byte_field(field_offset), -1);
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_cgetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
 
-        SET_STACK_INT(obj->char_field(field_offset), -1);
+        MAYBE_POST_FIELD_ACCESS(obj);
 
+        SET_STACK_INT(obj->char_field(field_offset), -1);
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_dgetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
+
+        MAYBE_POST_FIELD_ACCESS(obj);
 
         SET_STACK_DOUBLE(obj->double_field(field_offset), 0);
         MORE_STACK(1);
-
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_fgetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
 
-        SET_STACK_FLOAT(obj->float_field(field_offset), -1);
+        MAYBE_POST_FIELD_ACCESS(obj);
 
+        SET_STACK_FLOAT(obj->float_field(field_offset), -1);
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_igetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
 
-        SET_STACK_INT(obj->int_field(field_offset), -1);
+        MAYBE_POST_FIELD_ACCESS(obj);
 
+        SET_STACK_INT(obj->int_field(field_offset), -1);
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_lgetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
+
+        MAYBE_POST_FIELD_ACCESS(obj);
 
         SET_STACK_LONG(obj->long_field(field_offset), 0);
         MORE_STACK(1);
-
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_sgetfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) STACK_OBJECT(-1);
+        oop obj = STACK_OBJECT(-1);
         CHECK_NULL(obj);
 
-        SET_STACK_INT(obj->short_field(field_offset), -1);
+        MAYBE_POST_FIELD_ACCESS(obj);
 
+        SET_STACK_INT(obj->short_field(field_offset), -1);
         UPDATE_PC_AND_CONTINUE(3);
       }
+
       CASE(_fast_aputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
-        VERIFY_OOP(STACK_OBJECT(-1));
         obj->obj_field_put(field_offset, STACK_OBJECT(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_bputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->byte_field_put(field_offset, STACK_INT(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_zputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->byte_field_put(field_offset, STACK_INT(-1) & 1);
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_cputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->char_field_put(field_offset, STACK_INT(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_dputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-3);
+        oop obj = STACK_OBJECT(-3);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->double_field_put(field_offset, STACK_DOUBLE(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -3);
       }
+
       CASE(_fast_fputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->float_field_put(field_offset, STACK_FLOAT(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_iputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->int_field_put(field_offset, STACK_INT(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_lputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-3);
+        oop obj = STACK_OBJECT(-3);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->long_field_put(field_offset, STACK_LONG(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -3);
       }
+
       CASE(_fast_sputfield): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        oop obj = (oop) STACK_OBJECT(-2);
+        oop obj = STACK_OBJECT(-2);
         CHECK_NULL(obj);
 
-        MAYBE_POST_FIELD_MODIFICATION();
+        MAYBE_POST_FIELD_MODIFICATION(obj);
 
         int field_offset = cache->f2_as_index();
         obj->short_field_put(field_offset, STACK_INT(-1));
 
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, -2);
       }
+
       CASE(_fast_aload_0): {
-        VERIFY_OOP(LOCALS_OBJECT(0));
-        SET_STACK_OBJECT(LOCALS_OBJECT(0), 0);
+        oop obj = LOCALS_OBJECT(0);
+        VERIFY_OOP(obj);
+        SET_STACK_OBJECT(obj, 0);
         UPDATE_PC_AND_TOS_AND_CONTINUE(1, 1);
       }
+
       CASE(_fast_aaccess_0): {
         u2 index = Bytes::get_native_u2(pc+2);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        VERIFY_OOP(LOCALS_OBJECT(0));
-
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) LOCALS_OBJECT(0);
+        oop obj = LOCALS_OBJECT(0);
         CHECK_NULL(obj);
+        VERIFY_OOP(obj);
+
+        MAYBE_POST_FIELD_ACCESS(obj);
 
         VERIFY_OOP(obj->obj_field(field_offset));
         SET_STACK_OBJECT(obj->obj_field(field_offset), 0);
-
         UPDATE_PC_AND_TOS_AND_CONTINUE(4, 1);
       }
+
       CASE(_fast_faccess_0): {
         u2 index = Bytes::get_native_u2(pc+2);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        VERIFY_OOP(LOCALS_OBJECT(0));
-
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) LOCALS_OBJECT(0);
+        oop obj = LOCALS_OBJECT(0);
         CHECK_NULL(obj);
+        VERIFY_OOP(obj);
+
+        MAYBE_POST_FIELD_ACCESS(obj);
 
         SET_STACK_INT(obj->int_field(field_offset), 0);
-
         UPDATE_PC_AND_TOS_AND_CONTINUE(4, 1);
       }
+
       CASE(_fast_iaccess_0): {
         u2 index = Bytes::get_native_u2(pc+2);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
         int field_offset = cache->f2_as_index();
 
-        VERIFY_OOP(LOCALS_OBJECT(0));
-
-        MAYBE_POST_FIELD_ACCESS();
-
-        oop obj = (oop) LOCALS_OBJECT(0);
+        oop obj = LOCALS_OBJECT(0);
         CHECK_NULL(obj);
+        VERIFY_OOP(obj);
+
+        MAYBE_POST_FIELD_ACCESS(obj);
 
         SET_STACK_FLOAT(obj->float_field(field_offset), 0);
-
         UPDATE_PC_AND_TOS_AND_CONTINUE(4, 1);
       }
+
       CASE(_fast_invokevfinal): {
         u2 index = Bytes::get_native_u2(pc+1);
         ConstantPoolCacheEntry* cache = cp->entry_at(index);
 
-        assert (cache->is_resolved(Bytecodes::_invokevirtual), "Should be resolved before rewriting");
+        assert(cache->is_resolved(Bytecodes::_invokevirtual), "Should be resolved before rewriting");
 
         istate->set_msg(call_method);
 
         CHECK_NULL(STACK_OBJECT(-(cache->parameter_size())));
         Method* callee = cache->f2_as_vfinal_method();
         istate->set_callee(callee);
-        istate->set_callee_entry_point(callee->from_interpreted_entry());
         if (JVMTI_ENABLED && THREAD->is_interp_only_mode()) {
           istate->set_callee_entry_point(callee->interpreter_entry());
+        } else {
+          istate->set_callee_entry_point(callee->from_interpreted_entry());
         }
         istate->set_bcp_advance(3);
-        UPDATE_PC_AND_RETURN(0); // I'll be back...
+        UPDATE_PC_AND_RETURN(0);
       }
+
       DEFAULT:
           fatal("Unimplemented opcode %d = %s", opcode,
                 Bytecodes::name((Bytecodes::Code)opcode));
